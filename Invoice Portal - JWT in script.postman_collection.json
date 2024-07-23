@@ -1,0 +1,1054 @@
+{
+	"info": {
+		"_postman_id": "7abb546d-0d7a-4b48-84db-2970ea9d9c54",
+		"name": "Invoice Portal - JWT in script",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "5352113"
+	},
+	"item": [
+		{
+			"name": "Authenticate",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"\r",
+							"// Your client ID and other required information from the create API screen under member settings \r",
+							"const clientId = pm.environment.get(\"ClientID\");\r",
+							"const jwtSecret = pm.environment.get(\"ClientSecret\");\r",
+							"// Note - in the current version (Nov 23) Member ID needs to be requested from support, in a future release it will be visible in the member settings. \r",
+							"const issuer = pm.environment.get(\"MemberID\"); // Will be an integer \r",
+							"\r",
+							"console.log(\"ClientID: \" + clientId);\r",
+							"console.log(\"jwtSecret: \" + jwtSecret);\r",
+							"console.log(\"issuer: \" + issuer);\r",
+							"//const issuer = 'ReadSoftOnline';\r",
+							"\r",
+							"const audience = 'InvoicePortal'; // For 3rd party apps the requestor's member ID should be used for the “audience”\r",
+							"const uid = 'jwt_uid_'+ Date.now();\r",
+							"\r",
+							"var currentTimestamp = Math.floor(Date.now() / 1000);\r",
+							"// Generate the JWT\r",
+							"const jwtPayload = {\r",
+							"  sub: clientId,\r",
+							"  iss: issuer,\r",
+							"  aud: audience,\r",
+							"  exp: Math.floor(currentTimestamp) + ((60 * 60) * 1000), // Token expiration time in seconds (1 hour)\r",
+							"  nbf: Math.floor(currentTimestamp),\r",
+							"  iat: Math.floor(currentTimestamp),\r",
+							"  jti: uid,\r",
+							"};\r",
+							"\r",
+							"\r",
+							"console.log(jwtPayload);\r",
+							"\r",
+							"\r",
+							"var header = {\r",
+							"\t'typ': 'JWT',\r",
+							"\t'alg': 'HS256'\r",
+							"};\r",
+							"\r",
+							"\r",
+							"function base64url(source) {\r",
+							"    // Encode in classical base64\r",
+							"    encodedSource = CryptoJS.enc.Base64.stringify(source)\r",
+							"    \r",
+							"    // Remove padding equal characters\r",
+							"    encodedSource = encodedSource.replace(/=+$/, '')\r",
+							"    \r",
+							"    // Replace characters according to base64url specifications\r",
+							"    encodedSource = encodedSource.replace(/\\+/g, '-')\r",
+							"    encodedSource = encodedSource.replace(/\\//g, '_')\r",
+							"    \r",
+							"    return encodedSource\r",
+							"}\r",
+							"\r",
+							"// encode header\r",
+							"var stringifiedHeader = CryptoJS.enc.Utf8.parse(JSON.stringify(header))\r",
+							"var encodedHeader = base64url(stringifiedHeader)\r",
+							"\r",
+							"// encode data\r",
+							"var stringifiedData = CryptoJS.enc.Utf8.parse(JSON.stringify(jwtPayload))\r",
+							"var encodedData = base64url(stringifiedData)\r",
+							"\r",
+							"// build token\r",
+							"var token = `${encodedHeader}.${encodedData}`\r",
+							"\r",
+							"// sign token\r",
+							"//var signature = CryptoJS.HmacSHA256(token, jwtSecret); // Secret not Base64 encoded\r",
+							"var signature = CryptoJS.HmacSHA256(token, CryptoJS.enc.Base64.parse(jwtSecret)); // If base64 encoded\r",
+							"\r",
+							"signature = base64url(signature)\r",
+							"var signedToken = `${token}.${signature}`\r",
+							"\r",
+							"pm.environment.set('jwt_signed', signedToken)\r",
+							"console.log('Signed and encoded JWT', signedToken)\r",
+							""
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"let response = pm.response.json();\r",
+							"pm.environment.set('bearer_token', response.access_token);\r",
+							"console.log(\"Bearer token: \" + pm.environment.get('bearer_token'));"
+						],
+						"type": "text/javascript",
+						"packages": {}
+					}
+				}
+			],
+			"protocolProfileBehavior": {
+				"disabledSystemHeaders": {
+					"content-type": true,
+					"accept": true
+				}
+			},
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/x-www-form-urlencoded",
+						"type": "text"
+					},
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "grant_type=client_credentials&\r\nclient_id={{ClientID}}&\r\nclient_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer&\r\nclient_assertion={{jwt_signed}}"
+				},
+				"url": {
+					"raw": "https://web.invoiceportal.net/api/oauth2/tokens",
+					"protocol": "https",
+					"host": [
+						"web",
+						"invoiceportal",
+						"net"
+					],
+					"path": [
+						"api",
+						"oauth2",
+						"tokens"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Member",
+			"protocolProfileBehavior": {
+				"disabledSystemHeaders": {
+					"accept": true
+				}
+			},
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{bearer_token}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "https://web.invoiceportal.net/api/members/{{MemberID}}",
+					"protocol": "https",
+					"host": [
+						"web",
+						"invoiceportal",
+						"net"
+					],
+					"path": [
+						"api",
+						"members",
+						"{{MemberID}}"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Member with Query",
+			"protocolProfileBehavior": {
+				"disabledSystemHeaders": {
+					"accept": true
+				}
+			},
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{bearer_token}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "https://web.invoiceportal.net/api/members/{{MemberID}}?q={\"type\":\"VAT\", \"countryId\":\"UK\",\"identifier\":\"GB12341234\",\"sort\":\"status\"}",
+					"protocol": "https",
+					"host": [
+						"web",
+						"invoiceportal",
+						"net"
+					],
+					"path": [
+						"api",
+						"members",
+						"{{MemberID}}"
+					],
+					"query": [
+						{
+							"key": "q",
+							"value": "{\"type\":\"VAT\", \"countryId\":\"UK\",\"identifier\":\"GB12341234\",\"sort\":\"status\"}"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Member Address",
+			"protocolProfileBehavior": {
+				"disabledSystemHeaders": {
+					"accept": true
+				}
+			},
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{bearer_token}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "https://web.invoiceportal.net/api/members/{{MemberID}}/addresses",
+					"protocol": "https",
+					"host": [
+						"web",
+						"invoiceportal",
+						"net"
+					],
+					"path": [
+						"api",
+						"members",
+						"{{MemberID}}",
+						"addresses"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Member Party Identifiers",
+			"protocolProfileBehavior": {
+				"disabledSystemHeaders": {
+					"accept": true
+				}
+			},
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{bearer_token}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "https://web.invoiceportal.net/api/members/{{MemberID}}/partyIdentifiers",
+					"protocol": "https",
+					"host": [
+						"web",
+						"invoiceportal",
+						"net"
+					],
+					"path": [
+						"api",
+						"members",
+						"{{MemberID}}",
+						"partyIdentifiers"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Member Invoices",
+			"protocolProfileBehavior": {
+				"disabledSystemHeaders": {
+					"accept": true
+				}
+			},
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{bearer_token}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "https://web.invoiceportal.net/api/members/{{MemberID}}/invoices",
+					"protocol": "https",
+					"host": [
+						"web",
+						"invoiceportal",
+						"net"
+					],
+					"path": [
+						"api",
+						"members",
+						"{{MemberID}}",
+						"invoices"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Member Invoices - Pagination",
+			"protocolProfileBehavior": {
+				"disabledSystemHeaders": {
+					"accept": true
+				}
+			},
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{bearer_token}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "https://web.invoiceportal.net/api/members/{{MemberID}}/invoices?size=5&page=2",
+					"protocol": "https",
+					"host": [
+						"web",
+						"invoiceportal",
+						"net"
+					],
+					"path": [
+						"api",
+						"members",
+						"{{MemberID}}",
+						"invoices"
+					],
+					"query": [
+						{
+							"key": "size",
+							"value": "5"
+						},
+						{
+							"key": "page",
+							"value": "2"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Member Invoices - Sorted",
+			"protocolProfileBehavior": {
+				"disabledSystemHeaders": {
+					"accept": true
+				}
+			},
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{bearer_token}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "https://web.invoiceportal.net/api/members/{{MemberID}}/invoices?sort=dueDate:asc,invoiceNo:asc",
+					"protocol": "https",
+					"host": [
+						"web",
+						"invoiceportal",
+						"net"
+					],
+					"path": [
+						"api",
+						"members",
+						"{{MemberID}}",
+						"invoices"
+					],
+					"query": [
+						{
+							"key": "sort",
+							"value": "dueDate:asc,invoiceNo:asc"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Member Invoices - Sorted & Filtered",
+			"protocolProfileBehavior": {
+				"disabledSystemHeaders": {
+					"accept": true
+				}
+			},
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{bearer_token}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "https://web.invoiceportal.net/api/members/{{MemberID}}/invoices?sort=dueDate:asc,invoiceNo:asc&q={\"status\":\"Received\"}",
+					"protocol": "https",
+					"host": [
+						"web",
+						"invoiceportal",
+						"net"
+					],
+					"path": [
+						"api",
+						"members",
+						"{{MemberID}}",
+						"invoices"
+					],
+					"query": [
+						{
+							"key": "sort",
+							"value": "dueDate:asc,invoiceNo:asc"
+						},
+						{
+							"key": "q",
+							"value": "{\"status\":\"Received\"}"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Member Invoices by Status",
+			"protocolProfileBehavior": {
+				"disabledSystemHeaders": {
+					"accept": true
+				}
+			},
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{bearer_token}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "https://web.invoiceportal.net/api/members/{{MemberID}}/invoices?q={\"status\":\"Received\"}",
+					"protocol": "https",
+					"host": [
+						"web",
+						"invoiceportal",
+						"net"
+					],
+					"path": [
+						"api",
+						"members",
+						"{{MemberID}}",
+						"invoices"
+					],
+					"query": [
+						{
+							"key": "q",
+							"value": "{\"status\":\"Received\"}"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Member Invoice Details",
+			"protocolProfileBehavior": {
+				"disabledSystemHeaders": {
+					"accept": true
+				}
+			},
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{bearer_token}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "https://web.invoiceportal.net/api/members/{{MemberID}}/invoices/20914540",
+					"protocol": "https",
+					"host": [
+						"web",
+						"invoiceportal",
+						"net"
+					],
+					"path": [
+						"api",
+						"members",
+						"{{MemberID}}",
+						"invoices",
+						"20914540"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Member Invoices by Arrived At (Greater Than)",
+			"protocolProfileBehavior": {
+				"disabledSystemHeaders": {
+					"accept": true
+				}
+			},
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{bearer_token}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "https://web.invoiceportal.net/api/members/{{MemberID}}/invoices?q={\"arrivedAt\":{\"$gte\":\"2024-01-26T08:00:00Z\"}}",
+					"protocol": "https",
+					"host": [
+						"web",
+						"invoiceportal",
+						"net"
+					],
+					"path": [
+						"api",
+						"members",
+						"{{MemberID}}",
+						"invoices"
+					],
+					"query": [
+						{
+							"key": "q",
+							"value": "{\"arrivedAt\":{\"$gte\":\"2024-01-26T08:00:00Z\"}}"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Download Invoice as PDF",
+			"protocolProfileBehavior": {
+				"disabledSystemHeaders": {
+					"accept": true
+				}
+			},
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json, application/pdf",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{bearer_token}}",
+						"type": "text"
+					},
+					{
+						"key": "",
+						"value": "",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "https://web.invoiceportal.net/api/members/{{MemberID}}/invoices/20914540/payload",
+					"protocol": "https",
+					"host": [
+						"web",
+						"invoiceportal",
+						"net"
+					],
+					"path": [
+						"api",
+						"members",
+						"{{MemberID}}",
+						"invoices",
+						"20914540",
+						"payload"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Download Original Invoice",
+			"protocolProfileBehavior": {
+				"disabledSystemHeaders": {
+					"accept": true
+				}
+			},
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json, application/pdf",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{bearer_token}}",
+						"type": "text"
+					},
+					{
+						"key": "",
+						"value": "",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "https://web.invoiceportal.net/api/members/{{MemberID}}/invoices/20914540/original",
+					"protocol": "https",
+					"host": [
+						"web",
+						"invoiceportal",
+						"net"
+					],
+					"path": [
+						"api",
+						"members",
+						"{{MemberID}}",
+						"invoices",
+						"20914540",
+						"original"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Invoice Attachments",
+			"protocolProfileBehavior": {
+				"disabledSystemHeaders": {
+					"accept": true
+				}
+			},
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json, application/pdf",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{bearer_token}}",
+						"type": "text"
+					},
+					{
+						"key": "",
+						"value": "",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "https://web.invoiceportal.net/api/members/{{MemberID}}/invoices/20914540/attachments",
+					"protocol": "https",
+					"host": [
+						"web",
+						"invoiceportal",
+						"net"
+					],
+					"path": [
+						"api",
+						"members",
+						"{{MemberID}}",
+						"invoices",
+						"20914540",
+						"attachments"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Update Invoice Status",
+			"protocolProfileBehavior": {
+				"disabledSystemHeaders": {
+					"accept": true
+				}
+			},
+			"request": {
+				"method": "PATCH",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json, application/pdf",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{bearer_token}}",
+						"type": "text"
+					},
+					{
+						"key": "",
+						"value": "",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n  \"status\" : \"Delivered\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "https://web.invoiceportal.net/api/members/{{MemberID}}/invoices/21962899",
+					"protocol": "https",
+					"host": [
+						"web",
+						"invoiceportal",
+						"net"
+					],
+					"path": [
+						"api",
+						"members",
+						"{{MemberID}}",
+						"invoices",
+						"21962899"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Download Invoice as XML (ESXML2)",
+			"protocolProfileBehavior": {
+				"disabledSystemHeaders": {
+					"accept": true
+				}
+			},
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json, application/xml",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text",
+						"disabled": true
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{bearer_token}}",
+						"type": "text"
+					},
+					{
+						"key": "",
+						"value": "",
+						"type": "text",
+						"disabled": true
+					}
+				],
+				"url": {
+					"raw": "https://web.invoiceportal.net/api/members/{{MemberID}}/invoices/21962899/payload",
+					"protocol": "https",
+					"host": [
+						"web",
+						"invoiceportal",
+						"net"
+					],
+					"path": [
+						"api",
+						"members",
+						"{{MemberID}}",
+						"invoices",
+						"21962899",
+						"payload"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Invoice Details",
+			"protocolProfileBehavior": {
+				"disabledSystemHeaders": {
+					"accept": true
+				}
+			},
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{bearer_token}}",
+						"type": "text"
+					},
+					{
+						"key": "",
+						"value": "",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "https://web.invoiceportal.net/api/members/{{MemberID}}/invoices/21961267",
+					"protocol": "https",
+					"host": [
+						"web",
+						"invoiceportal",
+						"net"
+					],
+					"path": [
+						"api",
+						"members",
+						"{{MemberID}}",
+						"invoices",
+						"21961267"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Member Users",
+			"protocolProfileBehavior": {
+				"disabledSystemHeaders": {
+					"accept": true
+				}
+			},
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{bearer_token}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "https://web.invoiceportal.net/api/members/{{MemberID}}/users",
+					"protocol": "https",
+					"host": [
+						"web",
+						"invoiceportal",
+						"net"
+					],
+					"path": [
+						"api",
+						"members",
+						"{{MemberID}}",
+						"users"
+					]
+				}
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	]
+}
